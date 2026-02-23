@@ -17,19 +17,22 @@ public class LEDColorComponent : ComponentBase
     [Parameter]
     public string ChangedBy { get; set; } = "No one yet";
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        hubConnection = new HubConnectionBuilder()
+        if (firstRender && OperatingSystem.IsBrowser())
+        {
+            hubConnection = new HubConnectionBuilder()
             .WithUrl(Navigation.ToAbsoluteUri("/ledcolorhub"))
             .Build();
 
-        hubConnection.On("ReceiveLEDColor", (LEDColorChange change) =>
-        {
-            Color = change.Color;
-            ChangedBy = change.ChangedBy;
-            InvokeAsync(StateHasChanged);
-        });
+            hubConnection.On("ReceiveLEDColor", (LEDColorChange change) =>
+            {
+                Color = change.Color;
+                ChangedBy = change.ChangedBy;
+                InvokeAsync(StateHasChanged);
+            });
 
-        await hubConnection.StartAsync();
+            await hubConnection.StartAsync();
+        }
     }
 }

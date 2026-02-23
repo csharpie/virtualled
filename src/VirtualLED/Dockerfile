@@ -10,11 +10,12 @@ ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
 # Copy only the .csproj first for restore
-COPY VirtualLED/VirtualLED.csproj ./VirtualLED/
-RUN dotnet restore ./VirtualLED/VirtualLED.csproj
+COPY src/VirtualLED/VirtualLED.csproj VirtualLED/
+
+RUN dotnet restore VirtualLED/VirtualLED.csproj
 
 # Copy everything else
-COPY . .
+COPY src/ ./
 
 # Build the project
 WORKDIR /src/VirtualLED
