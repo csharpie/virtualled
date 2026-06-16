@@ -32,6 +32,6 @@ dotnet run --project src/VirtualLED.csproj
 HTTP POST /api/token
 {
     "UserName": "USER_NAME_HERE",
-    "Password": "PASSWORD_HERE
+    "Password": "PASSWORD_HERE"
 }
 ```
