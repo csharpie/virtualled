@@ -5,24 +5,23 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Serilog;
 using VirtualLED.Components;
 using VirtualLED.Hubs;
+using VirtualLED.Middlewares;
 using VirtualLED.Models;
 using VirtualLED.Services;
 
+
+var logger = Log.Logger = new LoggerConfiguration()
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .CreateLogger();
+
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    {
-        options.ForwardedHeaders =
-            ForwardedHeaders.XForwardedFor |
-            ForwardedHeaders.XForwardedProto |
-            ForwardedHeaders.XForwardedHost;
-        options.KnownIPNetworks.Clear();
-        options.KnownProxies.Clear();
-
-        options.AllowedHosts.Add("localhost:8080");
-    });
+builder.Host.UseSerilog((_, config) => config.ReadFrom.Configuration(builder.Configuration));
+builder.Services.AddHttpLogging(o => { });
 
 // Add DI
 builder.Services.AddSingleton<IColorService, LEDColorService>();
@@ -33,11 +32,8 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddSignalR();
-builder.Services.AddResponseCompression(opts =>
-{
-    opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
-        ["application/octet-stream"]);
-});
+
+builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddControllers();
 
@@ -57,32 +53,24 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-char[] encryptionKey = [];
-var key = new byte[32];
-RandomNumberGenerator.Fill(key);
-
-builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AppSettings"));
-
-if (string.IsNullOrEmpty(builder.Configuration["AppSettings:EncryptionKey"]))
+builder.Services.AddAuthentication(options =>
 {
-    builder.Configuration["AppSettings:EncryptionKey"] = Convert.ToBase64String(key);
-}
-
-encryptionKey = builder.Configuration["AppSettings:EncryptionKey"]!.ToCharArray();
-
-var keyBytes = Encoding.UTF8.GetBytes(encryptionKey);
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
     .AddJwtBearer(options =>
     {
         options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
+            ValidateIssuer = true,
+            ValidateAudience = true,
             ValidateLifetime = true,
-            LifetimeValidator = (_, expires, _, _) => expires > DateTime.UtcNow
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
+            ValidAudience = builder.Configuration["JwtSettings:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:Key"] ?? string.Empty)),
+            ClockSkew = TimeSpan.Zero
         };
     });
 
@@ -90,6 +78,9 @@ builder.Services.AddAuthorization();
 
 
 var app = builder.Build();
+
+app.UseHttpLogging();
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 app.UseForwardedHeaders();
 
@@ -118,9 +109,10 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.UseResponseCompression();
 app.MapHub<LEDColorHub>("/ledcolorhub");
 
 app.MapControllers();
 
-app.Run();
+await app.RunAsync();
+
+
