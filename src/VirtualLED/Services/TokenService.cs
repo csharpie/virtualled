@@ -1,33 +1,31 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using VirtualLED.Models;
-
 namespace VirtualLED.Services;
 
 public class TokenService : ITokenService
 {
-    private readonly string _key;
-    public TokenService(IOptions<AppSettings> options)
+    private readonly IConfiguration _configuration;
+
+    public TokenService(IConfiguration configuration)
     {
-        _key = options.Value.EncryptionKey;
+        _configuration = configuration;
     }
 
     public string GenerateToken()
     {
-        var keyBytes = Encoding.UTF8.GetBytes(_key);
-        var securityKey = new SymmetricSecurityKey(keyBytes);
-        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
-        var tokenDescriptor = new SecurityTokenDescriptor
+        var claims = new List<Claim>
         {
-            Expires = DateTime.UtcNow.AddDays(7),
-            SigningCredentials = credentials
+            new(JwtRegisteredClaimNames.Sub, Environment.GetEnvironmentVariable("AuthorizedUser") ?? string.Empty),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
-        var handler = new JwtSecurityTokenHandler();
-        var token = handler.CreateToken(tokenDescriptor);
-        return handler.WriteToken(token);
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JwtSettings:Key"] ?? string.Empty));
+        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(issuer: _configuration["JwtSettings:Issuer"], audience: _configuration["JwtSettings:Audience"], claims: claims, expires: DateTime.UtcNow.AddMinutes(Convert.ToInt32(_configuration["JwtSettings:DurationInMinutes"])), signingCredentials: credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }

@@ -1,4 +1,6 @@
 .env
+.sonarqube/
 artifacts/
 bin/
 obj/
+logs/

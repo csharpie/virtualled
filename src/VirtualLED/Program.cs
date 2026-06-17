@@ -1,126 +1,135 @@
-using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Serilog;
 using VirtualLED.Components;
 using VirtualLED.Hubs;
+using VirtualLED.Middlewares;
 using VirtualLED.Models;
 using VirtualLED.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+var logger = Log.Logger = new LoggerConfiguration()
+    .CreateLogger();
 
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    {
-        options.ForwardedHeaders =
-            ForwardedHeaders.XForwardedFor |
-            ForwardedHeaders.XForwardedProto |
-            ForwardedHeaders.XForwardedHost;
-        options.KnownIPNetworks.Clear();
-        options.KnownProxies.Clear();
-
-        options.AllowedHosts.Add("localhost:8080");
-    });
-
-// Add DI
-builder.Services.AddSingleton<IColorService, LEDColorService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-
-// Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-
-builder.Services.AddSignalR();
-builder.Services.AddResponseCompression(opts =>
+try
 {
-    opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
-        ["application/octet-stream"]);
-});
 
-builder.Services.AddControllers();
+    var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
+    builder.Host.UseSerilog((_, config) => config.ReadFrom.Configuration(builder.Configuration));
+    builder.Services.AddHttpLogging(o => { });
+
+    // Add DI
+    builder.Services.AddSingleton<IColorService, LEDColorService>();
+    builder.Services.AddScoped<ITokenService, TokenService>();
+
+    builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+    builder.Services.AddProblemDetails();
+
+    // Add services to the container.
+    builder.Services.AddRazorComponents()
+        .AddInteractiveServerComponents();
+
+    builder.Services.AddSignalR();
+
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+    var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>() ?? new JwtSettings();
+
+    if (string.IsNullOrWhiteSpace(jwtSettings.Key))
     {
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        Description = "JWT Authorization header using the Bearer scheme."
-    });
-    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+        Log.Fatal("JwtSettings:Key is not configured");
+        throw new InvalidOperationException("JwtSettings:Key is not configured.");
+    }
+
+    builder.Services.AddControllers();
+
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen(options =>
     {
-        [new OpenApiSecuritySchemeReference("bearer", document)] = []
-    });
-});
-
-char[] encryptionKey = [];
-var key = new byte[32];
-RandomNumberGenerator.Fill(key);
-
-builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AppSettings"));
-
-if (string.IsNullOrEmpty(builder.Configuration["AppSettings:EncryptionKey"]))
-{
-    builder.Configuration["AppSettings:EncryptionKey"] = Convert.ToBase64String(key);
-}
-
-encryptionKey = builder.Configuration["AppSettings:EncryptionKey"]!.ToCharArray();
-
-var keyBytes = Encoding.UTF8.GetBytes(encryptionKey);
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.SaveToken = true;
-        options.TokenValidationParameters = new TokenValidationParameters
+        options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
-            ValidateLifetime = true,
-            LifetimeValidator = (_, expires, _, _) => expires > DateTime.UtcNow
-        };
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "JWT Authorization header using the Bearer scheme."
+        });
+        options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+        {
+            [new OpenApiSecuritySchemeReference("bearer", document)] = []
+        });
     });
 
-builder.Services.AddAuthorization();
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+        .AddJwtBearer(options =>
+        {
+            options.SaveToken = true;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
+                ValidAudience = builder.Configuration["JwtSettings:Audience"],
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:Key"] ?? string.Empty)),
+                ClockSkew = TimeSpan.Zero
+            };
+        });
+
+    builder.Services.AddAuthorization();
 
 
-var app = builder.Build();
+    var app = builder.Build();
 
-app.UseForwardedHeaders();
+    app.UseExceptionHandler();
 
-// Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
+    app.UseHttpLogging();
+    app.UseMiddleware<RequestLoggingMiddleware>();
+
+    app.UseForwardedHeaders();
+
+    // Configure the HTTP request pipeline.
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseExceptionHandler("/Error", createScopeForErrors: true);
+        // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+        app.UseHsts();
+    }
+    else
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+    app.UseHttpsRedirection();
+
+    app.UseAuthentication();
+    app.UseAuthorization();
+
+    app.UseAntiforgery();
+
+    app.MapStaticAssets();
+    app.MapRazorComponents<App>()
+        .AddInteractiveServerRenderMode();
+
+    app.MapHub<LEDColorHub>("/ledcolorhub");
+
+    app.MapControllers();
+
+    await app.RunAsync();
 }
-else
+catch (Exception ex)
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    Log.Fatal(ex, "Application terminated unexpectedly");
 }
-
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.UseAntiforgery();
-
-app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-
-app.UseResponseCompression();
-app.MapHub<LEDColorHub>("/ledcolorhub");
-
-app.MapControllers();
-
-app.Run();
+finally
+{
+    await Log.CloseAndFlushAsync();
+}

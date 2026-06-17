@@ -4,6 +4,7 @@
 **/.gitignore
 **/.project
 **/.settings
+**/.sonarqube
 **/.toolstarget
 **/.vs
 **/.vscode
@@ -12,10 +13,12 @@
 **/*.dbmdl
 **/*.jfm
 **/azds.yaml
+**/artifacts
 **/bin
 **/charts
 **/docker-compose*
 **/Dockerfile*
+**/logs
 **/node_modules
 **/npm-debug.log
 **/obj
