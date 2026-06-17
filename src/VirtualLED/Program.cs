@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Serilog;
@@ -41,6 +42,13 @@ try
     {
         Log.Fatal("JwtSettings:Key is not configured");
         throw new InvalidOperationException("JwtSettings:Key is not configured.");
+    }
+
+    if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development")
+    {
+        builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo("/keys"))
+        .SetApplicationName("VirtualLED");
     }
 
     builder.Services.AddControllers();

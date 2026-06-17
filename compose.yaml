@@ -1,6 +1,8 @@
 services:
   virtualled:
     image: virtualled
+    volumes:
+      - dpkeys:/keys
     build:
       context: .
       dockerfile: ./src/VirtualLED/Dockerfile
