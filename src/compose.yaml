@@ -1,19 +1,15 @@
 services:
   virtualled:
     image: virtualled
-    volumes:
-      - dpkeys:/keys
     build:
       context: .
       dockerfile: ./Dockerfile
     ports:
       - 8080:8080
     environment:
-      - ASPNETCORE_URLS=http://+:8080
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=${ASPNETCORE_FORWARDEDHEADERS_ENABLED}
+      - ASPNETCORE_URLS=${ASPNETCORE_URLS}
       - AuthorizedUser=${AuthorizedUser}
       - AuthorizedUserPassword=${AuthorizedUserPassword}
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
       - JwtSettings__Key=${JwtSettings__Key}
-
-volumes:
-  dpkeys:
