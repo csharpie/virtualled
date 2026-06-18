@@ -2,10 +2,10 @@
 A Blazor application that allows clients to change the color of the "lightbulb."
 
 ## Table of Contents
-- Getting Started
-- Anatomy
-- Examples of how connect
-  - ServiceNow
+- [Virtual LED](#virtual-led)
+  - [Table of Contents](#table-of-contents)
+  - [Getting Started](#getting-started)
+  - [Credits](#credits)
 
 ## Getting Started
 1. Clone the GitHub repository.
@@ -35,3 +35,9 @@ HTTP POST /api/token
     "Password": "PASSWORD_HERE"
 }
 ```
+## Credits
+- Serilog implementation, API Error Code Handling and JWT implementation
+  - Trevoir William's course [The Definitive ASP.NET Core Web API Guide](https://learning.oreilly.com/videos/-/9781807606855/), on O'Reilly
+    - [GitHub Repository](https://github.com/trevoirwilliams/HotelListing.Api/)
+- Serilog implementation
+  - Steve Smith a.k.a Ardalis' [RiverBooks GitHub Repository](https://github.com/ardalis/RiverBooks)
