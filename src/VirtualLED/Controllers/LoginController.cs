@@ -6,7 +6,7 @@ namespace VirtualLED.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class LoginController : ControllerBase
+public class LoginController : BaseApiController
 {
     private readonly ILogger<LoginController> _logger;
     private readonly ITokenService _tokenService;

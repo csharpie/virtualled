@@ -8,7 +8,7 @@ namespace VirtualLED.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class LEDColorController : ControllerBase
+public class LEDColorController : BaseApiController
 {
     private readonly IColorService _service;
 
