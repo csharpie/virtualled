@@ -47,7 +47,6 @@ try
     if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development")
     {
         builder.Services.AddDataProtection()
-        .PersistKeysToFileSystem(new DirectoryInfo(builder.Configuration["CloudHosting:KeysPath"] ?? string.Empty))
         .SetApplicationName("VirtualLED");
     }
 
