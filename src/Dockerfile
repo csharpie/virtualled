@@ -9,22 +9,27 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
-# Copy only the .csproj first for restore
-COPY src/VirtualLED/VirtualLED.csproj VirtualLED/
-
-RUN dotnet restore VirtualLED/VirtualLED.csproj
+# Copy project file and restore it
+COPY Directory.Build.props ./
+COPY Directory.Packages.props ./
+COPY VirtualLED/VirtualLED.csproj ./VirtualLED/
+RUN dotnet restore ./VirtualLED/VirtualLED.csproj
 
 # Copy everything else
-COPY src/ ./
+COPY VirtualLED/ ./VirtualLED/
+
+# Create keys/ directory
+RUN mkdir -p /keys \
+    && chown -R app:app /keys
 
 # Build the project
 WORKDIR /src/VirtualLED
-RUN dotnet build VirtualLED.csproj -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet build ./VirtualLED.csproj -c $BUILD_CONFIGURATION -o /app/build
 
 # Publish the project
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish VirtualLED.csproj -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish ./VirtualLED.csproj -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 # Final runtime image
 FROM base AS final
