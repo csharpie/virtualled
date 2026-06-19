@@ -24,7 +24,7 @@ git clone https://github.com/csharpie/VirtualLED.git
 ```
 4. Run the solution.
 ```pwsh
-dotnet run --project src/VirtualLED.csproj
+dotnet run --project src/VirtualLED/VirtualLED.csproj
 ```
 5. Navigate to the [LED Color](http://localhost:5050/ledcolor) Razor Page.
 6. Get a Token.
